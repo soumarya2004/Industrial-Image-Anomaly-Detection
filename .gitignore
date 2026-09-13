@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+*.egg
+build/
+dist/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Data (never commit raw dataset)
+data/mvtec_ad/
+data/*/train/
+data/*/test/
+data/*/ground_truth/
+*.tar.xz
+*.zip
+
+# Model weights (large binaries - track via releases / git-lfs, not plain git)
+models/**/*.pt
+models/**/*.pth
+!models/**/README.md
+
+# Results (generated, not source)
+results/plots/*.png
+results/heatmaps/*.png
+results/confusion_matrix/*.png
+results/examples/*.png
+results/experiments/*.json
+results/experiments/*.csv
+!results/**/.gitkeep
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+
+# Logs
+*.log
+runs/

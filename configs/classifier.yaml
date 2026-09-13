@@ -1,0 +1,63 @@
+# Experiment configuration for Approach A: supervised defect classifier.
+# Every field here is logged alongside metrics in results/experiments/ so each
+# run is fully reproducible and comparable to other runs (see README section
+# "Experiment Tracking").
+
+experiment:
+  name: "classifier_resnet18_bottle_v1"
+  seed: 42
+  description: >
+    Baseline supervised classifier: ResNet18 backbone pretrained on ImageNet,
+    fine-tuned on MVTec AD bottle category (good vs. broken_large vs.
+    broken_small vs. contamination, collapsed to binary normal/defective).
+
+data:
+  root: "data/mvtec_ad"
+  category: "bottle"
+  image_size: 224
+  # Binary task by default (normal vs. defective). Set to false to keep the
+  # original 4-way defect-type labels for the multiclass ablation.
+  binary_labels: true
+  # Fraction of the *labeled* (test-split) images set aside for validation.
+  # The remaining labeled images become the held-out final test set, which is
+  # NEVER used for model selection or threshold tuning (see data leakage policy).
+  val_fraction: 0.3
+  num_workers: 2
+
+augmentation:
+  enabled: true
+  horizontal_flip: true      # valid: bottle top-view has no fixed left/right orientation cue
+  vertical_flip: false       # invalid: would flip cap-up/cap-down semantics if present
+  rotation_degrees: 15       # small only — large rotation is not representative of the fixed-mount imaging rig
+  brightness_jitter: 0.15
+  contrast_jitter: 0.10
+  random_crop_scale: [0.9, 1.0]
+
+model:
+  architecture: "resnet18"          # resnet18 | resnet50 | efficientnet_b0
+  pretrained: true
+  # frozen | partial | full — see ablation study in README
+  finetune_mode: "partial"
+  unfrozen_layers: ["layer4", "fc"]  # only used when finetune_mode == "partial"
+  dropout: 0.3
+  num_classes: 2
+
+training:
+  batch_size: 16
+  epochs: 30
+  optimizer: "adamw"
+  learning_rate: 0.0003
+  weight_decay: 0.0001
+  scheduler: "cosine"
+  scheduler_min_lr: 0.000001
+  early_stopping_patience: 7
+  class_weighting: true       # counteract normal/defective imbalance in loss
+  loss: "cross_entropy"
+
+checkpointing:
+  save_dir: "models/classifier"
+  monitor_metric: "val_f1"    # model selection uses VALIDATION metric only
+  mode: "max"
+
+device:
+  prefer_cuda: true

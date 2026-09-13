@@ -1,0 +1,65 @@
+# Experiment configuration for Approach B: unsupervised convolutional
+# autoencoder anomaly detector. Trained ONLY on normal ("good") images.
+
+experiment:
+  name: "conv_autoencoder_bottle_v1"
+  seed: 42
+  description: >
+    Convolutional autoencoder trained exclusively on MVTec AD bottle/train/good
+    images. Anomaly score = per-image mean squared reconstruction error.
+    Threshold selected from a held-out validation split of NORMAL images plus
+    a small labeled validation slice, never from the final test set.
+
+data:
+  root: "data/mvtec_ad"
+  category: "bottle"
+  image_size: 128          # smaller than classifier: keeps the autoencoder
+                            # lightweight and reconstruction task well-posed;
+                            # see resolution ablation in README
+  # train/train_good is split into train/val so we can pick the best epoch
+  # (lowest validation reconstruction error) without touching test data.
+  normal_val_fraction: 0.15
+  num_workers: 2
+
+augmentation:
+  enabled: true
+  horizontal_flip: true
+  vertical_flip: false
+  rotation_degrees: 10
+  brightness_jitter: 0.1
+
+model:
+  architecture: "conv_autoencoder"
+  latent_dim: 256            # ablated: 64 / 128 / 256 / 512 — see README ablations
+  base_channels: 32
+  num_downsample_blocks: 4
+
+training:
+  batch_size: 16
+  epochs: 100
+  optimizer: "adam"
+  learning_rate: 0.001
+  weight_decay: 0.00001
+  scheduler: "reduce_on_plateau"
+  scheduler_patience: 5
+  early_stopping_patience: 15
+  loss: "mse"                # ablated against ssim / l1 — see README ablations
+
+threshold_selection:
+  # Threshold is computed AFTER training, using reconstruction errors from:
+  #  (a) the held-out normal validation split (data.normal_val_fraction), and
+  #  (b) a small labeled validation slice carved out of the test set
+  #      (configs/classifier.yaml val_fraction) reused here for consistency.
+  # Method: choose the threshold that maximizes F1 on that validation-only
+  # ROC/PR curve. This is NOT an arbitrary percentile pick — see README
+  # "Anomaly Detection > Threshold Selection".
+  method: "f1_optimal_on_validation"
+  fallback_percentile: 95    # used only if validation labels are unavailable
+
+checkpointing:
+  save_dir: "models/autoencoder"
+  monitor_metric: "val_reconstruction_error"
+  mode: "min"
+
+device:
+  prefer_cuda: true
