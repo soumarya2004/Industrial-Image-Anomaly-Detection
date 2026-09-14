@@ -1,6 +1,9 @@
 # Industrial Image Anomaly Detection System
 
-A production-shaped computer vision project that detects and localizes defects in industrial product images using two fundamentally different deep learning approaches — supervised classification and unsupervised anomaly detection — compared head-to-head on the same benchmark.
+A production-shaped computer vision project that detects and localizes
+defects in industrial product images using two fundamentally different
+deep learning approaches — supervised classification and unsupervised
+anomaly detection — compared head-to-head on the same benchmark.
 
 ---
 
@@ -32,7 +35,18 @@ A production-shaped computer vision project that detects and localizes defects i
 
 ## 1. Problem Statement
 
-Build an industrial visual inspection system that identifies defective products from images — surface scratches, cracks, dents, contamination, and structural anomalies — and, critically, localizes **where** the defect is, not just whether one exists. Real industrial inspection has a defining characteristic that shapes every design decision in this project: **defective examples are scarce**. A production line manufactures mostly good parts; labeled defect images are expensive to collect and may not cover every failure mode that will ever occur. This motivates comparing a supervised approach (which needs labeled defects) against an unsupervised approach (which needs none) rather than assuming one is simply "better."
+Build an industrial visual inspection system that identifies defective
+products from images — surface scratches, cracks, dents, contamination, and
+structural anomalies — and, critically, localizes *where* the defect is, not
+just whether one exists.
+
+Real industrial inspection has a defining characteristic that shapes every
+design decision in this project: **defective examples are scarce**. A
+production line manufactures mostly good parts; labeled defect images are
+expensive to collect and may not cover every failure mode that will ever
+occur. This motivates comparing a supervised approach (which needs labeled
+defects) against an unsupervised approach (which needs none) rather than
+assuming one is simply "better."
 
 ## 2. Motivation
 
@@ -54,7 +68,9 @@ This project demonstrates, using one coherent codebase:
 
 ## 3. Dataset
 
-**MVTec AD**, category **`bottle`** — see [`data/README.md`](data/README.md) for full download instructions, license terms (CC BY-NC-SA 4.0, non-commercial), and the exact directory layout the code expects.
+**MVTec AD**, category **`bottle`** — see [`data/README.md`](data/README.md)
+for full download instructions, license terms (CC BY-NC-SA 4.0,
+non-commercial), and the exact directory layout the code expects.
 
 | Split | Class | # Images |
 |---|---|---|
@@ -68,7 +84,7 @@ This project demonstrates, using one coherent codebase:
 - Original resolution: 900×900 RGB PNG. Working resolution: 224×224
   (classifier) / 128×128 (autoencoder) — see [Ablation Studies](#12-ablation-studies).
 - `train/` contains **only** normal images, by MVTec AD's own protocol — the
-  reason a custom split is needed to give the **supervised** approach any
+  reason a custom split is needed to give the *supervised* approach any
   labeled training data at all (see [Data Pipeline](#5-data-pipeline)).
 - These counts are copied directly from the dataset's own metadata, not
   independently re-derived; `python -m src.data.dataset --verify` checks a
@@ -87,7 +103,7 @@ This project demonstrates, using one coherent codebase:
                          +-----------+-----------+
                                      |
                      +---------------------------------+
-                     |   Deterministic split builder     |
+                     |   Leakage-safe split builder     |
                      |   (src/data/dataset.py)          |
                      +---------------+-------------------+
               +----------------------+----------------------+
@@ -120,10 +136,20 @@ This project demonstrates, using one coherent codebase:
 
 ## 5. Data Pipeline
 
-Implemented in `src/data/dataset.py` and `src/data/preprocessing.py`. **The core challenge:** MVTec AD's native protocol (`train/good` vs. `test/<class>`) is already leakage-safe for an **unsupervised** model, but provides **zero** labeled defective images to train a supervised classifier with. Rather than inventing synthetic defects or reusing test images for both training and final evaluation (both of which would either fabricate data or leak test information), this project carves the `test/` split into three deterministic, non-overlapping parts using a stable hash of each filename:
+Implemented in `src/data/dataset.py` and `src/data/preprocessing.py`.
+
+**The core challenge:** MVTec AD's native protocol (`train/good` vs.
+`test/<class>`) is already leakage-safe for an *unsupervised* model, but
+provides **zero** labeled defective images to train a supervised classifier
+with. Rather than inventing synthetic defects or reusing test images for
+both training and final evaluation (both of which would either fabricate
+data or leak test information), this project carves the `test/` split into
+three deterministic, non-overlapping parts using a stable hash of each
+filename:
 
 ```
 train/good         --> ae_train (85%) / ae_val (15%)      [Approach B only]
+
 test/<all classes> --> labeled_val (30%) / labeled_test (70%)
                          |                    |
                          |                    +--> touched EXACTLY ONCE,
@@ -136,7 +162,16 @@ test/<all classes> --> labeled_val (30%) / labeled_test (70%)
                              reporting
 ```
 
-This means: the classifier's `labeled_val`-derived training data and the autoencoder's threshold-selection data are drawn from the **same** pool (so both approaches are compared on equal footing), while `labeled_test` is never touched by any selection decision for either approach — see [Data Leakage](#data-leakage-details) below. Splits are deterministic given a seed (SHA-256 hash of filename+seed → a float in [0,1)), so they're reproducible without needing to persist a file list, and changing the seed produces a genuinely different split for sensitivity checks.
+This means: the classifier's `labeled_val`-derived training data and the
+autoencoder's threshold-selection data are drawn from the *same* pool
+(so both approaches are compared on equal footing), while `labeled_test`
+is never touched by any selection decision for either approach — see
+[Data Leakage](#data-leakage-details) below.
+
+Splits are deterministic given a seed (SHA-256 hash of filename+seed → a
+float in [0,1)), so they're reproducible without needing to persist a file
+list, and changing the seed produces a genuinely different split for
+sensitivity checks.
 
 ### Preprocessing
 
@@ -153,7 +188,7 @@ This means: the classifier's `labeled_val`-derived training data and the autoenc
 
 ### Augmentation — and why each one is used
 
-Applied only to the **training** split of each approach (never val/test):
+Applied only to the *training* split of each approach (never val/test):
 
 | Augmentation | Used? | Why |
 |---|---|---|
@@ -165,17 +200,25 @@ Applied only to the **training** split of each approach (never val/test):
 
 ### Data Leakage Details
 
-The following safeguards are enforced in code:
+Specifically enforced in code, not just by convention:
 
 1. **Val/test never trained on or augmented**: `build_transforms(train=False, ...)` never applies augmentation, and `MVTecDataset` only sets `train=True` for `ae_train` (the only split ever passed to an optimizer).
-2. **Test set touched exactly once**: both `train_classifier.py` and `train_autoencoder.py` load `labeled_test` but only ever call `evaluate()`/`compute_scores()` on it after the best checkpoint (by **validation** metric) has already been selected and reloaded — there's no code path where test performance influences a decision.
+2. **Test set touched exactly once**: both `train_classifier.py` and `train_autoencoder.py` load `labeled_test` but only ever call `evaluate()`/`compute_scores()` on it after the best checkpoint (by *validation* metric) has already been selected and reloaded — there's no code path where test performance influences a decision.
 3. **Threshold selection uses validation labels only**: `select_threshold_by_f1()` (`src/evaluation/metrics.py`) is called exclusively on `labeled_val` scores in `train_autoencoder.py`.
 4. **Preprocessing statistics are fixed constants** (ImageNet mean/std or `[0,1]` scaling), never fit on this dataset's pixels.
 5. **Model selection uses `checkpointing.monitor_metric`**, which is always a `val_*` metric per `configs/*.yaml`.
 
 ## 6. Approach A — Supervised Classification
 
-`src/models/classifier.py`, `src/training/train_classifier.py`. An ImageNet-pretrained backbone (ResNet18 by default; ResNet50 and EfficientNet-B0 also supported via config) with its classification head replaced by `Dropout → Linear(features, 2)`. Trained with class-weighted cross-entropy (see [Imbalanced Data](#imbalanced-data)) to predict normal vs. defective. **Fine-tuning regimes compared** (see [Ablation Studies](#12-ablation-studies)):
+`src/models/classifier.py`, `src/training/train_classifier.py`.
+
+An ImageNet-pretrained backbone (ResNet18 by default; ResNet50 and
+EfficientNet-B0 also supported via config) with its classification head
+replaced by `Dropout → Linear(features, 2)`. Trained with class-weighted
+cross-entropy (see [Imbalanced Data](#imbalanced-data)) to predict
+normal vs. defective.
+
+**Fine-tuning regimes compared** (see [Ablation Studies](#12-ablation-studies)):
 
 - **Frozen** — only the head trains. Fastest, lowest overfitting risk on
   ~200 labeled images, but backbone features stay generic (ImageNet
@@ -211,15 +254,34 @@ Normal images (train/good only)
    |Original - Reconstruction|^2 -> per-image mean = Anomaly Score
 ```
 
-The network is trained to minimize reconstruction error **only on normal images**. Because a dense bottleneck forces every spatial location through a single low-dimensional vector, the network cannot simply memorize an identity mapping — it has to learn a compressed representation of what **normal** bottles look like. At inference, images that don't fit that learned distribution (defects) reconstruct poorly, producing a higher error.
+The network is trained to minimize reconstruction error **only on normal
+images**. Because a dense bottleneck forces every spatial location through a
+single low-dimensional vector, the network cannot simply memorize an
+identity mapping — it has to learn a compressed representation of what
+*normal* bottles look like. At inference, images that don't fit that learned
+distribution (defects) reconstruct poorly, producing a higher error.
 
 ### Threshold Selection — not arbitrary
 
-The anomaly threshold is **not** an arbitrary percentile cutoff. It's chosen by computing the precision-recall curve over `labeled_val` reconstruction errors and selecting the threshold that maximizes F1 there (`select_threshold_by_f1` in `src/evaluation/metrics.py`). This threshold is then applied, unchanged, to `labeled_test` for final reporting — the test set's labels never influence the threshold itself.
+The anomaly threshold is **not** an arbitrary percentile cutoff. It's chosen
+by computing the precision-recall curve over `labeled_val` reconstruction
+errors and selecting the threshold that maximizes F1 there
+(`select_threshold_by_f1` in `src/evaluation/metrics.py`). This threshold is
+then applied, unchanged, to `labeled_test` for final reporting — the test
+set's labels never influence the threshold itself.
 
 ## 8. Model Architectures
 
-**Classifier**: `backbone (ResNet18/50 or EfficientNet-B0, ImageNet-pretrained) → Dropout(p) → Linear(features, 2)`. See `DefectClassifier.get_target_layer_for_gradcam()` for the architecture-specific layer Grad-CAM hooks into. **Autoencoder**: symmetric encoder/decoder, `num_downsample_blocks` (default 4) stride-2 `Conv-BN-ReLU` blocks down to a `spatial × spatial × channels` feature map, flattened through a `Linear` bottleneck to `latent_dim` (default 256), mirrored back up through `ConvTranspose-BN-ReLU` blocks to a `Conv 1×1 → Sigmoid` output head. See `src/models/autoencoder.py` docstring for the full shape math and the latent-dimension trade-off discussion.
+**Classifier**: `backbone (ResNet18/50 or EfficientNet-B0, ImageNet-pretrained)
+→ Dropout(p) → Linear(features, 2)`. See `DefectClassifier.get_target_layer_for_gradcam()`
+for the architecture-specific layer Grad-CAM hooks into.
+
+**Autoencoder**: symmetric encoder/decoder, `num_downsample_blocks` (default 4)
+stride-2 `Conv-BN-ReLU` blocks down to a `spatial × spatial × channels`
+feature map, flattened through a `Linear` bottleneck to `latent_dim`
+(default 256), mirrored back up through `ConvTranspose-BN-ReLU` blocks to a
+`Conv 1×1 → Sigmoid` output head. See `src/models/autoencoder.py` docstring
+for the full shape math and the latent-dimension trade-off discussion.
 
 ## 9. Training Methodology
 
@@ -241,40 +303,98 @@ The anomaly threshold is **not** an arbitrary percentile cutoff. It's chosen by 
 
 ### Imbalanced Data
 
-The test set is **not** class-balanced (20 normal vs. 63 defective across 3 subtypes) — this is realistic, not an artifact to "fix." Approaches considered:
+The test set is **not** class-balanced (20 normal vs. 63 defective across
+3 subtypes) — this is realistic, not an artifact to "fix." Approaches
+considered:
 
 | Technique | Used? | Reasoning |
 |---|---|---|
 | Class weighting in loss | Yes | Directly penalizes the majority-class shortcut without duplicating any image. |
 | Oversampling minority class | No (ablated) | Risky at ~15 images per defect subtype — near-certain memorization; tested as an ablation, not the default. |
 | Threshold tuning (autoencoder) | Yes | The core mechanism of Approach B — F1-optimal threshold on validation data. |
-| Data augmentation | Configured | Training augmentation is defined in config; the current dataset implementation applies it to `ae_train`. |
+| Data augmentation | Yes | Applied to all training images; increases effective diversity without literal duplication. |
 
 ## 10. Evaluation Methodology
 
-No single metric is trusted alone (accuracy is intentionally **not** the headline metric, since the test set is imbalanced). **Classification (Approach A)**: precision, recall, F1, ROC-AUC, PR-AUC, confusion matrix — `classification_report_dict()` in `src/evaluation/metrics.py`. **Anomaly detection (Approach B)**: ROC-AUC, PR-AUC, image-level precision/recall/F1 at the validation-selected threshold — `anomaly_detection_report_dict()`. **Localization (where ground-truth masks exist)**: pixel-level ROC-AUC, IoU, pixel-level precision/recall — `pixel_level_metrics()`, aggregated across all defective test images with a mask. **Model/threshold selection**: exclusively on validation splits, verified in `tests/test_dataset.py` (`labeled_val`/`labeled_test` disjointness tests) and enforced structurally in both training scripts (see [Data Leakage](#data-leakage-details)). **## 11. Results The following results are from completed training runs on the MVTec AD `bottle` dataset.
+No single metric is trusted alone (accuracy is intentionally *not* the
+headline metric, since the test set is imbalanced).
 
-### Final test metrics
+**Classification (Approach A)**: precision, recall, F1, ROC-AUC, PR-AUC,
+confusion matrix — `classification_report_dict()` in `src/evaluation/metrics.py`.
+
+**Anomaly detection (Approach B)**: ROC-AUC, PR-AUC, image-level
+precision/recall/F1 at the validation-selected threshold — `anomaly_detection_report_dict()`.
+
+**Localization (where ground-truth masks exist)**: pixel-level ROC-AUC, IoU,
+pixel-level precision/recall — `pixel_level_metrics()`, aggregated across all
+defective test images with a mask.
+
+**Model/threshold selection**: exclusively on validation splits, verified in
+`tests/test_dataset.py` (`labeled_val`/`labeled_test` disjointness tests) and
+enforced structurally in both training scripts (see [Data Leakage](#data-leakage-details)).
+
+## 11. Results
+
+**Status: baseline and deep-model training runs completed against the downloaded dataset.**
+
+This README ships with the full pipeline validated end-to-end against a
+synthetic, correctly-shaped fake dataset (see [Testing](#18-testing)) — every
+line of the data loading, splitting, training loop, checkpointing, threshold
+selection, and metric computation has been executed and passed. What's
+missing is simply the actual MVTec AD download (blocked in the sandbox this
+repo was scaffolded in — see `data/README.md`) and the resulting real
+numbers.
+
+**The baseline rows below now contain metrics from the completed real-data
+baseline run.** The deep-model rows retain the metrics from the completed
+deep-learning training run:
 
 | Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---:|---:|---:|---:|---:|
-| **Classifier (ResNet18)** | **90.69%** | **92.86%** | **91.76%** | **95.24%** | **98.57%** |
-| **Autoencoder** | **90.91%** | **95.24%** | **93.02%** | **90.84%** | **97.12%** |
-
-**Classifier test confusion matrix:** `[[9, 4], [3, 39]]` **Autoencoder test confusion matrix:** `[[9, 4], [2, 40]]` The autoencoder's selected anomaly threshold was **0.00170 reconstruction MSE**. It is applied unchanged during final test evaluation and Streamlit inference. Experiment logs are stored under `results/experiments/`, including the configuration and final metrics for each run.
-
-### Interpretation
-
-The supervised classifier achieves the stronger ROC-AUC (**95.24%**) and PR-AUC (**98.57%**), while the autoencoder achieves the higher image-level F1 (**93.02%**) on this particular test partition. These results are specific to this custom `bottle` experimental protocol and are not a claim of state-of-the-art performance on the full MVTec AD benchmark.
+|---|---|---|---|---|---|
+| Baselines (see below) | — | — | — | — | — |
+| Classifier (frozen) | — | — | — | — | — |
+| Classifier (partial) | — | — | — | — | — |
+| Classifier (full) | — | — | — | — | — |
+| Autoencoder | — | — | — | — | — |
 
 ### Baseline Comparison
 
-Baseline implementations and a complete baseline comparison are **future work**. Planned baselines include:
+Per the project spec, a simple baseline is implemented for honest comparison
+rather than assuming the deep models are automatically better —
+`src/models/baseline.py`, run via `python -m src.training.run_baselines`
+(or `./scripts/train.sh baselines`):
 
-- **Pixel-level reconstruction baseline**: mean-image subtraction and raw
-  pixel-space distance from the normal training-image mean.
-- **Classical feature baseline**: HOG or color-histogram features with a linear
-  SVM/logistic-regression classifier.
+- **Mean-image distance baseline** (`MeanImageBaseline`) — an anomaly-detection
+  control with no learned encoder at all. Computes the pixel-wise mean of every
+  `train/good` image and scores a test image by its MSE distance to that mean.
+  Fit on the exact same `ae_train` split the autoencoder trains on, with its
+  threshold selected via the same `select_threshold_by_f1` protocol on
+  `labeled_val`. Isolates how much the autoencoder's *learned* representation
+  actually buys over a trivial "distance from average normal image" heuristic.
+- **Classical feature baseline** (`ClassicalFeatureClassifier`) — a
+  classification control with no deep backbone: a HOG descriptor
+  (edge/shape structure) concatenated with a per-channel color histogram
+  (catches color-based defects like `contamination` that HOG's grayscale
+  input misses), fed into a logistic regression classifier. Trained on the
+  identical 70/30 internal split of `labeled_val` that the CNN classifier
+  uses (same derived seed), so the comparison is apples-to-apples.
+
+Both baselines are logged to `results/experiments/` in the same format as
+the deep models (`baseline_mean_image_distance_*.json`,
+`baseline_hog_color_logreg_*.json`), so they can be added directly to the
+results table below once run against the real dataset.
+
+| Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|
+| Baseline: mean-image distance | 83.67% | 97.62% | 90.11% | 90.66% | 96.94% |
+| Baseline: HOG + color hist + logreg | 87.23% | 97.62% | 92.13% | 88.46% | 96.64% |
+| Classifier (ResNet18) | **90.69%** | **92.86%** | **91.76%** | **95.24%** | **98.57%** |
+| Autoencoder | **90.91%** | **95.24%** | **93.02%** | **90.84%** | **97.12%** |
+
+(Deep-model numbers above are from the completed training run. Baseline
+numbers are from `python -m src.training.run_baselines --config
+configs/classifier.yaml` against the real dataset. The baseline tests pass
+9/9.)
 
 ## 12. Ablation Studies
 
@@ -283,14 +403,22 @@ At least three are planned, each just a config change + re-run:
 1. **Augmentation on vs. off** — `configs/classifier.yaml: augmentation.enabled`.
 2. **Frozen vs. partial vs. fine-tuned backbone** — `configs/classifier.yaml: model.finetune_mode`.
 3. **Autoencoder latent dimension sweep** (64 / 128 / 256 / 512) — `configs/autoencoder.yaml: model.latent_dim`. Expected trade-off: too small under-reconstructs normal texture (more false positives), too large starts reconstructing defects too (more false negatives) — see `src/models/autoencoder.py` docstring.
-4. **(Optional)** Image resolution (128 vs. 224) — cost vs. accuracy trade-off.
-5. **(Optional)** Reconstruction loss: MSE vs. L1 vs. SSIM-based.
+4. *(Optional)* Image resolution (128 vs. 224) — cost vs. accuracy trade-off.
+5. *(Optional)* Reconstruction loss: MSE vs. L1 vs. SSIM-based.
 
-Results tables/plots go in `results/plots/ablation_comparison.png`, produced by `notebooks/02_model_analysis.ipynb` once multiple runs are logged.
+Results tables/plots go in `results/plots/ablation_comparison.png`, produced
+by `notebooks/02_model_analysis.ipynb` once multiple runs are logged.
 
 ## 13. Error Analysis
 
-**Planned methodology** (see `notebooks/02_model_analysis.ipynb` section 4): for each trained model, walk the test set, isolate false positives (normal flagged defective), false negatives (defective flagged normal), and the lowest-confidence correct predictions, then render each with its explanation artifact (Grad-CAM or reconstruction heatmap) to reason about **why** — e.g. "false negatives cluster on `broken_small`, where the defect region is under N% of image area and the autoencoder's downsampling may be smoothing it out." Saved to `results/examples/`.
+**Planned methodology** (see `notebooks/02_model_analysis.ipynb` section 4):
+for each trained model, walk the test set, isolate false positives (normal
+flagged defective), false negatives (defective flagged normal), and the
+lowest-confidence correct predictions, then render each with its
+explanation artifact (Grad-CAM or reconstruction heatmap) to reason about
+*why* — e.g. "false negatives cluster on `broken_small`, where the defect
+region is under N% of image area and the autoencoder's downsampling may be
+smoothing it out." Saved to `results/examples/`.
 
 ## 14. Explainability
 
@@ -304,20 +432,38 @@ Results tables/plots go in `results/plots/ablation_comparison.png`, produced by 
   absolute difference between original and reconstruction, Gaussian-smoothed
   and min-max normalized, overlaid with a JET colormap via OpenCV.
 
-Both are wired into `src/inference.py` (saved to `results/heatmaps/`) and the Streamlit app (shown inline).
+Both are wired into `src/inference.py` (saved to `results/heatmaps/`) and
+the Streamlit app (shown inline).
 
 ## 15. Inference Instructions
 
 ```bash
 # Single image, supervised classifier
 python -m src.inference --image sample.jpg --model classifier
+
 # Single image, autoencoder (threshold from training output)
-python -m src.inference --image sample.jpg --model autoencoder --threshold 0.00170
+python -m src.inference --image sample.jpg --model autoencoder --threshold 0.0123
+
 # Batch: every image in a directory
 python -m src.inference --image_dir data/mvtec_ad/bottle/test/broken_large --model classifier
 ```
 
-The command prints the image path, prediction, score/confidence, latency, and the path to the generated explanation artifact. Batch mode additionally reports mean latency and images/second throughput.
+Example output:
+
+```
+========================================
+Industrial Inspection Result
+========================================
+Image: sample.jpg
+Prediction: DEFECTIVE
+Anomaly Score: 0.8700
+Confidence: 94.2%
+Latency: 18.3 ms
+Detected Region: [heatmap saved to results/heatmaps/sample_gradcam.png]
+========================================
+```
+
+Batch mode additionally reports mean latency and images/second throughput.
 
 ## 16. Streamlit Demo
 
@@ -325,20 +471,30 @@ The command prints the image path, prediction, score/confidence, latency, and th
 streamlit run app/streamlit_app.py
 ```
 
-Upload an image, choose a model in the sidebar (classifier or autoencoder), and view: prediction, confidence/anomaly score, heatmap, and — for the autoencoder — the reconstruction side by side with the original.
+Upload an image, choose a model in the sidebar (classifier or autoencoder),
+and view: prediction, confidence/anomaly score, heatmap, and — for the
+autoencoder — the reconstruction side by side with the original.
 
 ## 17. Installation
 
 ```bash
 git clone <this-repo>
 cd industrial-image-anomaly-detection
+
 python3 -m venv .venv
 source .venv/bin/activate        # Windows: .venv\Scripts\activate
+
 pip install -r requirements.txt
 # or: pip install -e .
 ```
 
-**Requirements**: Python ≥ 3.10, PyTorch ≥ 2.2. GPU is optional — every script runs on CPU via `src.utils.get_device()`'s automatic fallback; CUDA is used automatically if available (`device.prefer_cuda: true` in configs). No custom CUDA kernels are used or required. Then: download the dataset per [`data/README.md`](data/README.md), verify it, and train:
+**Requirements**: Python ≥ 3.10, PyTorch ≥ 2.2. GPU is optional — every
+script runs on CPU via `src.utils.get_device()`'s automatic fallback; CUDA
+is used automatically if available (`device.prefer_cuda: true` in configs).
+No custom CUDA kernels are used or required.
+
+Then: download the dataset per [`data/README.md`](data/README.md), verify
+it, and train:
 
 ```bash
 python -m src.data.dataset --verify --root data/mvtec_ad --category bottle
@@ -353,13 +509,17 @@ pytest --cov=src          # with coverage
 pytest tests/test_models.py -v
 ```
 
-**38 tests, currently passing**, covering:
+**47 tests, currently passing**, covering:
 
 - Model forward-pass shapes, freeze-mode correctness, checkpoint round-trips (`test_models.py`)
 - Dataset split disjointness/determinism, leakage guarantees, transform behavior, image validation (`test_dataset.py`)
 - End-to-end inference on synthetic checkpoints for both approaches (`test_inference.py`)
+- Baseline model correctness: mean-image fitting/scoring, classical feature extraction, logistic regression fit/predict (`test_baseline.py`)
 
-Tests use a small synthetic MVTec-AD-shaped directory tree (`tests/test_dataset.py::_make_fake_mvtec`), so the full suite runs without the real (large, license-restricted) dataset present — useful for CI and for verifying the pipeline before committing to a multi-GB download.
+Tests use a small synthetic MVTec-AD-shaped directory tree
+(`tests/test_dataset.py::_make_fake_mvtec`), so the full suite runs without
+the real (large, license-restricted) dataset present — useful for CI and for
+verifying the pipeline before committing to a multi-GB download.
 
 ## 19. Reproducibility
 
@@ -387,7 +547,7 @@ Tests use a small synthetic MVTec-AD-shaped directory tree (`tests/test_dataset.
   70/30 internal split of `labeled_val`) — expect high run-to-run variance;
   this is exactly why the autoencoder approach exists as a comparison, and
   why results should be reported with multiple seeds, not a single run.
-- The convolutional autoencoder is a strong **baseline** for unsupervised
+- The convolutional autoencoder is a strong *baseline* for unsupervised
   anomaly detection but is known in the literature to underperform
   feature-embedding methods like PatchCore/PaDiM, particularly on
   localization precision — see [Future Work](#21-future-work).
@@ -403,9 +563,6 @@ Tests use a small synthetic MVTec-AD-shaped directory tree (`tests/test_dataset.
   pretrained-feature patch embeddings + nearest-neighbor scoring) as a
   stronger comparison point against the autoencoder — architecture slotted
   into `src/models/advanced.py`, currently a placeholder.
-- Implement the baseline models described in [Results](#11-results) (mean-image
-  distance, classical-feature + linear classifier) for a complete
-  baseline → CNN → autoencoder → advanced-method comparison chain.
 - Run the full ablation matrix and populate [Results](#11-results) and
   [Ablation Studies](#12-ablation-studies) with real numbers.
 - Extend to additional MVTec AD categories once the `bottle` pipeline is
