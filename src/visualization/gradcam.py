@@ -19,6 +19,7 @@ def generate_gradcam_overlay(
 
     from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
 
+    input_tensor=image_tensor.to(device).clone().requires_grad_(True)
     grayscale_cam=cam(
         input_tensor=image_tensor.to(device),
         targets=[ClassifierOutputTarget(target_class)],

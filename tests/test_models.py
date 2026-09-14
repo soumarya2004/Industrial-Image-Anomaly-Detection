@@ -3,6 +3,7 @@ import tempfile
 from pathlib import Path
 import pytest
 import torch
+import numpy as np
 from src.models.autoencoder import ConvAutoencoder, reconstruction_error_per_image
 from src.models.classifier import DefectClassifier
 
@@ -50,6 +51,19 @@ class TestDefectClassifier:
         model=DefectClassifier(architecture="resnet18", pretrained=False)
         layer=model.get_target_layer_for_gradcam()
         assert isinstance(layer, torch.nn.Module)
+
+    def test_gradcam_works_with_frozen_backbone(self):
+            from src.visualization.gradcam import generate_gradcam_overlay
+    
+            model=DefectClassifier(architecture="resnet18", pretrained=False, finetune_mode="frozen")
+            model.eval()
+            image_tensor=torch.randn(1, 3, 64, 64)
+            image_rgb01=torch.rand(64, 64, 3).numpy()
+            overlay=generate_gradcam_overlay(
+                model, image_tensor, image_rgb01, target_class=0, device=torch.device("cpu")
+            )
+            assert overlay.shape==(64, 64, 3)
+            assert overlay.dtype==np.uint8
 
     def test_checkpoint_save_and_load_roundtrip(self):
         model=DefectClassifier(architecture="resnet18", pretrained=False)

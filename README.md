@@ -90,10 +90,10 @@ non-commercial), and the exact directory layout the code expects.
   independently re-derived; `python -m src.data.dataset --verify` checks a
   local download against them.
 
-> **All metrics reported anywhere in this README are placeholders until
-> real training runs are executed.** This project does not fabricate
-> numbers — see [Results](#11-results) for the exact protocol used to fill
-> them in honestly, and the current status of that process.
+> **All model metrics reported in this README come from the completed
+> real-data training/evaluation runs documented in [Results](#11-results).**
+> No performance numbers are fabricated. Ablation results remain pending until
+> the corresponding experiments are executed.
 
 ## 4. System Architecture
 
@@ -335,70 +335,75 @@ enforced structurally in both training scripts (see [Data Leakage](#data-leakage
 
 ## 11. Results
 
-**Status: baseline and deep-model training runs completed against the downloaded dataset.**
+**Status: real-data training and baseline runs completed.**
 
-This README ships with the full pipeline validated end-to-end against a
-synthetic, correctly-shaped fake dataset (see [Testing](#18-testing)) — every
-line of the data loading, splitting, training loop, checkpointing, threshold
-selection, and metric computation has been executed and passed. What's
-missing is simply the actual MVTec AD download (blocked in the sandbox this
-repo was scaffolded in — see `data/README.md`) and the resulting real
-numbers.
+The classifier, autoencoder, and both baseline methods were evaluated on the
+held-out `labeled_test` split using the leakage-safe protocol described above.
+Model selection was performed using validation data only; the final test split
+was not used for checkpoint or threshold selection.
 
-**The baseline rows below now contain metrics from the completed real-data
-baseline run.** The deep-model rows retain the metrics from the completed
-deep-learning training run:
+### Main Results
 
 | Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---|---|---|---|---|
-| Baselines (see below) | — | — | — | — | — |
-| Classifier (frozen) | — | — | — | — | — |
-| Classifier (partial) | — | — | — | — | — |
-| Classifier (full) | — | — | — | — | — |
-| Autoencoder | — | — | — | — | — |
-
-### Baseline Comparison
-
-Per the project spec, a simple baseline is implemented for honest comparison
-rather than assuming the deep models are automatically better —
-`src/models/baseline.py`, run via `python -m src.training.run_baselines`
-(or `./scripts/train.sh baselines`):
-
-- **Mean-image distance baseline** (`MeanImageBaseline`) — an anomaly-detection
-  control with no learned encoder at all. Computes the pixel-wise mean of every
-  `train/good` image and scores a test image by its MSE distance to that mean.
-  Fit on the exact same `ae_train` split the autoencoder trains on, with its
-  threshold selected via the same `select_threshold_by_f1` protocol on
-  `labeled_val`. Isolates how much the autoencoder's *learned* representation
-  actually buys over a trivial "distance from average normal image" heuristic.
-- **Classical feature baseline** (`ClassicalFeatureClassifier`) — a
-  classification control with no deep backbone: a HOG descriptor
-  (edge/shape structure) concatenated with a per-channel color histogram
-  (catches color-based defects like `contamination` that HOG's grayscale
-  input misses), fed into a logistic regression classifier. Trained on the
-  identical 70/30 internal split of `labeled_val` that the CNN classifier
-  uses (same derived seed), so the comparison is apples-to-apples.
-
-Both baselines are logged to `results/experiments/` in the same format as
-the deep models (`baseline_mean_image_distance_*.json`,
-`baseline_hog_color_logreg_*.json`), so they can be added directly to the
-results table below once run against the real dataset.
-
-| Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---|---|---|---|---|
+|---|---:|---:|---:|---:|---:|
 | Baseline: mean-image distance | 83.67% | 97.62% | 90.11% | 90.66% | 96.94% |
 | Baseline: HOG + color hist + logreg | 87.23% | 97.62% | 92.13% | 88.46% | 96.64% |
 | Classifier (ResNet18) | **90.69%** | **92.86%** | **91.76%** | **95.24%** | **98.57%** |
 | Autoencoder | **90.91%** | **95.24%** | **93.02%** | **90.84%** | **97.12%** |
 
-(Deep-model numbers above are from the completed training run. Baseline
-numbers are from `python -m src.training.run_baselines --config
-configs/classifier.yaml` against the real dataset. The baseline tests pass
-9/9.)
+The autoencoder achieves the highest F1 and recall among the reported models,
+while the ResNet18 classifier achieves the highest ROC-AUC and PR-AUC. The
+baselines provide useful controls: the HOG + color histogram classifier is
+competitive on F1, while the learned autoencoder improves substantially over
+the simple mean-image distance baseline in F1.
+
+### Baseline Comparison
+
+Per the project spec, simple baselines are included for honest comparison
+rather than assuming the deep models are automatically better —
+`src/models/baseline.py`, run via `python -m src.training.run_baselines`
+(or `./scripts/train.sh baselines`):
+
+- **Mean-image distance baseline** (`MeanImageBaseline`) — an anomaly-detection
+  control with no learned encoder. It computes the pixel-wise mean of the
+  normal training images and scores a test image by its MSE distance to that
+  mean. It is fit on the exact same `ae_train` split used by the autoencoder,
+  with its threshold selected via the same `select_threshold_by_f1` protocol
+  on `labeled_val`.
+- **Classical feature baseline** (`ClassicalFeatureClassifier`) — a
+  classification control with no deep backbone: a HOG descriptor
+  (edge/shape structure) concatenated with a per-channel color histogram,
+  followed by logistic regression. It uses the identical 70/30 internal split
+  of `labeled_val` as the CNN classifier, with the same derived seed.
+
+Both baselines are logged to `results/experiments/` in the same format as the
+deep models (`baseline_mean_image_distance_*.json`,
+`baseline_hog_color_logreg_*.json`).
+
+### Interpretation
+
+The results show that neither formulation dominates on every metric.
+
+- The **autoencoder** has the strongest image-level F1 (93.02%) and recall
+  (95.24%), making it effective when missing a defect is particularly costly.
+- The **classifier** has the strongest ROC-AUC (95.24%) and PR-AUC (98.57%),
+  indicating strong ranking/discrimination performance despite a slightly
+  lower operating-point F1 than the autoencoder.
+- The **HOG + color histogram baseline** reaches 92.13% F1, showing that useful
+  structure and color information can already provide a strong classical
+  reference on this small dataset.
+- The **mean-image baseline** reaches 90.11% F1, providing evidence that the
+  learned autoencoder is doing more than simply measuring distance from an
+  average normal image.
+
+These results should be interpreted in the context of the small labeled
+dataset and the single `bottle` category; multi-seed and cross-category
+experiments remain future work.
 
 ## 12. Ablation Studies
 
-At least three are planned, each just a config change + re-run:
+The following ablations are planned but have **not yet been executed** in the
+reported results:
 
 1. **Augmentation on vs. off** — `configs/classifier.yaml: augmentation.enabled`.
 2. **Frozen vs. partial vs. fine-tuned backbone** — `configs/classifier.yaml: model.finetune_mode`.
@@ -411,14 +416,109 @@ by `notebooks/02_model_analysis.ipynb` once multiple runs are logged.
 
 ## 13. Error Analysis
 
-**Planned methodology** (see `notebooks/02_model_analysis.ipynb` section 4):
-for each trained model, walk the test set, isolate false positives (normal
-flagged defective), false negatives (defective flagged normal), and the
-lowest-confidence correct predictions, then render each with its
-explanation artifact (Grad-CAM or reconstruction heatmap) to reason about
-*why* — e.g. "false negatives cluster on `broken_small`, where the defect
-region is under N% of image area and the autoencoder's downsampling may be
-smoothing it out." Saved to `results/examples/`.
+Error analysis was run on **55 held-out test images** using the
+validation-selected autoencoder threshold of **0.00170**. The analysis
+categorizes predictions into false positives, false negatives, low-margin
+correct predictions, and ordinary correct predictions. Representative
+visualizations are saved under `results/examples/`.
+
+### Summary
+
+| Model | False Positives | False Negatives | Low-Margin Correct |
+|---|---:|---:|---:|
+| Classifier (ResNet18) | 4 | 3 | 4 |
+| Autoencoder | 4 | 2 | 10 |
+
+The classifier's three false negatives were all `contamination` defects.
+The autoencoder's two false negatives consisted of one `broken_small` defect
+and one `contamination` defect.
+
+### Defect Area vs. Failure
+
+For defective test images with ground-truth masks, the analysis compares the
+mean fraction of the image covered by defects in false negatives against
+defects that were correctly detected.
+
+| Model | Mean Defect Area — False Negatives | Mean Defect Area — True Positives | Difference |
+|---|---:|---:|---:|
+| Classifier | 2.68% | 8.25% | 5.57 percentage points |
+| Autoencoder | 1.79% | 8.15% | 6.36 percentage points |
+
+Both models show the same pattern: false-negative defects occupy substantially
+less image area, on average, than defects that are successfully detected.
+The autoencoder's false-negative defects average **1.79%** of the image versus
+**8.15%** for its true positives. The classifier shows a similar difference:
+**2.68%** versus **8.25%**.
+
+This supports the hypothesis that smaller defects are harder to detect, while
+avoiding the stronger claim that defect size is the only cause of failure.
+
+### Failure Breakdown
+
+**Classifier**
+
+- **3 false negatives**, all `contamination`.
+- The missed contamination defects had mask coverage of approximately
+  **2.07%**, **2.63%**, and **3.33%** of the image.
+- **4 false positives** occurred on normal images.
+- **4 low-margin correct** predictions were flagged for inspection.
+
+**Autoencoder**
+
+- **2 false negatives**: one `broken_small` and one `contamination`.
+- The missed `broken_small` defect covered approximately **1.51%** of the image.
+- The missed `contamination` defect covered approximately **2.07%** of the image.
+- **4 false positives** occurred on normal images.
+- **10 low-margin correct** predictions were flagged for inspection.
+
+### Representative Visualizations
+
+The error-analysis script saves composite visualizations containing the original
+image and the relevant model explanation:
+
+- **Classifier:** original image + Grad-CAM overlay.
+- **Autoencoder:** original image + reconstruction + reconstruction-error heatmap.
+
+Generated artifacts are stored under:
+
+```text
+results/examples/classifier/
+results/examples/autoencoder/
+```
+
+A machine-readable summary of the complete analysis is saved to:
+
+```text
+results/examples/error_analysis_summary.json
+```
+
+Representative classifier false-negative artifacts include:
+
+```text
+results/examples/classifier/classifier_false_negative_003.png
+results/examples/classifier/classifier_false_negative_004.png
+results/examples/classifier/classifier_false_negative_019.png
+```
+
+Representative autoencoder false-negative artifacts include:
+
+```text
+results/examples/autoencoder/autoencoder_false_negative_005.png
+results/examples/autoencoder/autoencoder_false_negative_004.png
+```
+
+The error-analysis implementation is also covered by the test suite, including
+failure classification, visualization artifact generation, and defect-area
+analysis.
+
+> **Bug found and fixed while building this:** `src/visualization/gradcam.py`
+> initially failed whenever `finetune_mode: frozen` was used (a fully
+> supported classifier config). With every backbone parameter's
+> `requires_grad=False`, PyTorch never builds an autograd graph, so Grad-CAM's
+> backward hooks received `None` gradients. The fix forces `requires_grad=True`
+> on the input tensor before the Grad-CAM forward pass, which is sufficient to
+> build the graph regardless of which backbone parameters are trainable. The
+> regression is covered by `test_gradcam_works_with_frozen_backbone`.
 
 ## 14. Explainability
 
@@ -509,12 +609,13 @@ pytest --cov=src          # with coverage
 pytest tests/test_models.py -v
 ```
 
-**47 tests, currently passing**, covering:
+**54 tests, currently passing**, covering:
 
-- Model forward-pass shapes, freeze-mode correctness, checkpoint round-trips (`test_models.py`)
+- Model forward-pass shapes, freeze-mode correctness, checkpoint round-trips, and a Grad-CAM/frozen-backbone regression test (`test_models.py`)
 - Dataset split disjointness/determinism, leakage guarantees, transform behavior, image validation (`test_dataset.py`)
 - End-to-end inference on synthetic checkpoints for both approaches (`test_inference.py`)
 - Baseline model correctness: mean-image fitting/scoring, classical feature extraction, logistic regression fit/predict (`test_baseline.py`)
+- Error analysis: failure classification, visualization artifact saving, defect-area/failure correlation math (`test_error_analysis.py`)
 
 Tests use a small synthetic MVTec-AD-shaped directory tree
 (`tests/test_dataset.py::_make_fake_mvtec`), so the full suite runs without
@@ -563,8 +664,8 @@ verifying the pipeline before committing to a multi-GB download.
   pretrained-feature patch embeddings + nearest-neighbor scoring) as a
   stronger comparison point against the autoencoder — architecture slotted
   into `src/models/advanced.py`, currently a placeholder.
-- Run the full ablation matrix and populate [Results](#11-results) and
-  [Ablation Studies](#12-ablation-studies) with real numbers.
+- Run the full ablation matrix and extend the results with augmentation,
+  fine-tuning, and autoencoder latent-dimension comparisons.
 - Extend to additional MVTec AD categories once the `bottle` pipeline is
   fully validated, to measure cross-category generalization.
 - Multi-seed reporting (mean ± std across ≥3 seeds) given the small dataset
