@@ -13,8 +13,17 @@ models/
 │   └── best_model.pt      # produced by: python -m src.training.train_classifier
 ├── autoencoder/
 │   └── best_model.pt      # produced by: python -m src.training.train_autoencoder
-└── advanced/
-    └── best_model.pt      # produced by the optional PatchCore/PaDiM extension, if implemented
+├── advanced/
+│   └── best_model.pt      # produced by the optional PatchCore/PaDiM extension, if implemented
+└── ablations/
+    ├── classifier_finetune_frozen/best_model.pt
+    ├── classifier_finetune_full/best_model.pt
+    ├── classifier_aug_off/best_model.pt
+    ├── autoencoder_latent64/best_model.pt
+    ├── ...                 # one subdirectory per configs/ablations/*.yaml,
+    │                       # named identically to that config's filename
+    └── (never overwrites classifier/ or autoencoder/ above — see
+        configs/ablations/*.yaml `checkpointing.save_dir`)
 ```
 
 ## What's inside a checkpoint

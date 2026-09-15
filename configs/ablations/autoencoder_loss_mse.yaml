@@ -1,0 +1,42 @@
+augmentation:
+  brightness_jitter: 0.1
+  enabled: true
+  horizontal_flip: true
+  rotation_degrees: 10
+  vertical_flip: false
+checkpointing:
+  mode: min
+  monitor_metric: val_reconstruction_error
+  save_dir: models/ablations/autoencoder_loss_mse
+data:
+  category: bottle
+  image_size: 128
+  normal_val_fraction: 0.15
+  num_workers: 2
+  root: data/mvtec_ad
+device:
+  prefer_cuda: true
+experiment:
+  description: 'Ablation (README section 12, item 5, optional): reconstruction loss
+    = mse. latent_dim fixed to the default 256 so loss function is the only varied
+    factor.'
+  name: ablation_autoencoder_loss_mse
+  seed: 42
+model:
+  architecture: conv_autoencoder
+  base_channels: 32
+  latent_dim: 256
+  num_downsample_blocks: 4
+threshold_selection:
+  fallback_percentile: 95
+  method: f1_optimal_on_validation
+training:
+  batch_size: 16
+  early_stopping_patience: 15
+  epochs: 100
+  learning_rate: 0.001
+  loss: mse
+  optimizer: adam
+  scheduler: reduce_on_plateau
+  scheduler_patience: 5
+  weight_decay: 1.0e-05

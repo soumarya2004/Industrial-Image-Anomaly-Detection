@@ -1,0 +1,47 @@
+augmentation:
+  brightness_jitter: 0.15
+  contrast_jitter: 0.1
+  enabled: true
+  horizontal_flip: true
+  random_crop_scale:
+  - 0.9
+  - 1.0
+  rotation_degrees: 15
+  vertical_flip: false
+checkpointing:
+  mode: max
+  monitor_metric: val_f1
+  save_dir: models/ablations/classifier_finetune_full
+data:
+  binary_labels: true
+  category: bottle
+  image_size: 224
+  num_workers: 2
+  root: data/mvtec_ad
+  val_fraction: 0.3
+device:
+  prefer_cuda: true
+experiment:
+  description: 'Ablation (README section 12, item 2): fine-tune mode = ''full''. All
+    other hyperparameters identical to configs/classifier.yaml so finetune_mode is
+    the only varied factor.'
+  name: ablation_classifier_finetune_full
+  seed: 42
+model:
+  architecture: resnet18
+  dropout: 0.3
+  finetune_mode: full
+  num_classes: 2
+  pretrained: true
+  unfrozen_layers: []
+training:
+  batch_size: 16
+  class_weighting: true
+  early_stopping_patience: 7
+  epochs: 30
+  learning_rate: 5.0e-05
+  loss: cross_entropy
+  optimizer: adamw
+  scheduler: cosine
+  scheduler_min_lr: 1.0e-06
+  weight_decay: 0.0001

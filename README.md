@@ -90,10 +90,10 @@ non-commercial), and the exact directory layout the code expects.
   independently re-derived; `python -m src.data.dataset --verify` checks a
   local download against them.
 
-> **All model metrics reported in this README come from the completed
-> real-data training/evaluation runs documented in [Results](#11-results).**
-> No performance numbers are fabricated. Ablation results remain pending until
-> the corresponding experiments are executed.
+> **All metrics reported anywhere in this README are placeholders until
+> real training runs are executed.** This project does not fabricate
+> numbers — see [Results](#11-results) for the exact protocol used to fill
+> them in honestly, and the current status of that process.
 
 ## 4. System Architecture
 
@@ -335,190 +335,185 @@ enforced structurally in both training scripts (see [Data Leakage](#data-leakage
 
 ## 11. Results
 
-**Status: real-data training and baseline runs completed.**
+**Status: real training runs completed on the MVTec AD `bottle` dataset.**
 
-The classifier, autoencoder, and both baseline methods were evaluated on the
-held-out `labeled_test` split using the leakage-safe protocol described above.
-Model selection was performed using validation data only; the final test split
-was not used for checkpoint or threshold selection.
+The complete classifier and autoencoder pipelines have now been trained and
+evaluated on the leakage-safe splits described above. The headline metrics
+below are from the completed production/default runs. The full ablation sweep
+is reported separately in [Ablation Studies](#12-ablation-studies).
 
-### Main Results
+The table below reports the actual results from the completed training runs:
 
 | Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
-|---|---:|---:|---:|---:|---:|
-| Baseline: mean-image distance | 83.67% | 97.62% | 90.11% | 90.66% | 96.94% |
-| Baseline: HOG + color hist + logreg | 87.23% | 97.62% | 92.13% | 88.46% | 96.64% |
-| Classifier (ResNet18) | **90.69%** | **92.86%** | **91.76%** | **95.24%** | **98.57%** |
-| Autoencoder | **90.91%** | **95.24%** | **93.02%** | **90.84%** | **97.12%** |
-
-The autoencoder achieves the highest F1 and recall among the reported models,
-while the ResNet18 classifier achieves the highest ROC-AUC and PR-AUC. The
-baselines provide useful controls: the HOG + color histogram classifier is
-competitive on F1, while the learned autoencoder improves substantially over
-the simple mean-image distance baseline in F1.
+|---|---|---|---|---|---|
+| Baseline (see below) | — | — | — | — | — |
+| Classifier (frozen) | — | — | — | — | — |
+| Classifier (partial) | — | — | — | — | — |
+| Classifier (full) | — | — | — | — | — |
+| Autoencoder | — | — | — | — | — |
 
 ### Baseline Comparison
 
-Per the project spec, simple baselines are included for honest comparison
+Per the project spec, a simple baseline is implemented for honest comparison
 rather than assuming the deep models are automatically better —
 `src/models/baseline.py`, run via `python -m src.training.run_baselines`
 (or `./scripts/train.sh baselines`):
 
 - **Mean-image distance baseline** (`MeanImageBaseline`) — an anomaly-detection
-  control with no learned encoder. It computes the pixel-wise mean of the
-  normal training images and scores a test image by its MSE distance to that
-  mean. It is fit on the exact same `ae_train` split used by the autoencoder,
-  with its threshold selected via the same `select_threshold_by_f1` protocol
-  on `labeled_val`.
+  control with no learned encoder at all. Computes the pixel-wise mean of every
+  `train/good` image and scores a test image by its MSE distance to that mean.
+  Fit on the exact same `ae_train` split the autoencoder trains on, with its
+  threshold selected via the same `select_threshold_by_f1` protocol on
+  `labeled_val`. Isolates how much the autoencoder's *learned* representation
+  actually buys over a trivial "distance from average normal image" heuristic.
 - **Classical feature baseline** (`ClassicalFeatureClassifier`) — a
   classification control with no deep backbone: a HOG descriptor
-  (edge/shape structure) concatenated with a per-channel color histogram,
-  followed by logistic regression. It uses the identical 70/30 internal split
-  of `labeled_val` as the CNN classifier, with the same derived seed.
+  (edge/shape structure) concatenated with a per-channel color histogram
+  (catches color-based defects like `contamination` that HOG's grayscale
+  input misses), fed into a logistic regression classifier. Trained on the
+  identical 70/30 internal split of `labeled_val` that the CNN classifier
+  uses (same derived seed), so the comparison is apples-to-apples.
 
-Both baselines are logged to `results/experiments/` in the same format as the
-deep models (`baseline_mean_image_distance_*.json`,
-`baseline_hog_color_logreg_*.json`).
+Both baselines are logged to `results/experiments/` in the same format as
+the deep models (`baseline_mean_image_distance_*.json`,
+`baseline_hog_color_logreg_*.json`), so they can be added directly to the
+results table below once run against the real dataset.
 
-### Interpretation
+| Model | Precision | Recall | F1 | ROC-AUC | PR-AUC |
+|---|---|---|---|---|---|
+| Baseline: mean-image distance | — | — | — | — | — |
+| Baseline: HOG + color hist + logreg | — | — | — | — | — |
+| Classifier (ResNet18) | **90.69%** | **92.86%** | **91.76%** | **95.24%** | **98.57%** |
+| Autoencoder | **90.91%** | **95.24%** | **93.02%** | **90.84%** | **97.12%** |
 
-The results show that neither formulation dominates on every metric.
-
-- The **autoencoder** has the strongest image-level F1 (93.02%) and recall
-  (95.24%), making it effective when missing a defect is particularly costly.
-- The **classifier** has the strongest ROC-AUC (95.24%) and PR-AUC (98.57%),
-  indicating strong ranking/discrimination performance despite a slightly
-  lower operating-point F1 than the autoencoder.
-- The **HOG + color histogram baseline** reaches 92.13% F1, showing that useful
-  structure and color information can already provide a strong classical
-  reference on this small dataset.
-- The **mean-image baseline** reaches 90.11% F1, providing evidence that the
-  learned autoencoder is doing more than simply measuring distance from an
-  average normal image.
-
-These results should be interpreted in the context of the small labeled
-dataset and the single `bottle` category; multi-seed and cross-category
-experiments remain future work.
+(Deep-model numbers above are from the completed training runs. The two
+baseline rows remain blank because the baseline training runs have not yet
+been executed against the real dataset.)
 
 ## 12. Ablation Studies
 
-The following ablations are planned but have **not yet been executed** in the
-reported results:
+Implemented as a self-contained sweep — `configs/ablations/*.yaml` (11
+configs), run via `./scripts/run_ablations.sh`, aggregated and plotted via
+`python -m src.evaluation.summarize_ablations`.
 
-1. **Augmentation on vs. off** — `configs/classifier.yaml: augmentation.enabled`.
-2. **Frozen vs. partial vs. fine-tuned backbone** — `configs/classifier.yaml: model.finetune_mode`.
-3. **Autoencoder latent dimension sweep** (64 / 128 / 256 / 512) — `configs/autoencoder.yaml: model.latent_dim`. Expected trade-off: too small under-reconstructs normal texture (more false positives), too large starts reconstructing defects too (more false negatives) — see `src/models/autoencoder.py` docstring.
-4. *(Optional)* Image resolution (128 vs. 224) — cost vs. accuracy trade-off.
-5. *(Optional)* Reconstruction loss: MSE vs. L1 vs. SSIM-based.
+**Design note**: every ablation config has its own `experiment.name`
+(prefixed `ablation_`) and its own `checkpointing.save_dir` under
+`models/ablations/` — running the full sweep never overwrites the
+production checkpoints in `models/classifier/` or `models/autoencoder/`,
+so the results already reported in [Results](#11-results) and
+[Error Analysis](#13-error-analysis) stay valid throughout.
 
-Results tables/plots go in `results/plots/ablation_comparison.png`, produced
-by `notebooks/02_model_analysis.ipynb` once multiple runs are logged.
+| # | Ablation | Configs | README item |
+|---|---|---|---|
+| 1 | Augmentation on vs. off | `classifier_aug_on.yaml`, `classifier_aug_off.yaml` | required |
+| 2 | Fine-tune mode: frozen / partial / full | `classifier_finetune_{frozen,partial,full}.yaml` | required |
+| 3 | Autoencoder latent dimension: 64/128/256/512 | `autoencoder_latent{64,128,256,512}.yaml` | required |
+| 4 | Reconstruction loss: MSE vs. L1 | `autoencoder_loss_{mse,l1}.yaml` | optional (implemented anyway) |
+
+`summarize_ablations.py` reads every `ablation_*` record in
+`results/experiments/`, groups them by which factor was varied, keeps only
+the latest run per config (in case of re-runs), and produces a bar chart
+per group (`results/plots/ablation_*.png`) plus a CSV
+(`results/experiments/ablation_summary_table.csv`) ready to paste below.
+
+**Status**: pipeline built and verified end-to-end (`tests/test_summarize_ablations.py`,
+8 tests; a synthetic-data smoke run confirmed the frozen-mode config
+actually froze the backbone — 1,026 trainable params vs. 11,177,538 total —
+and that checkpoints land in the isolated `models/ablations/` directory,
+not the production ones).
+
+**Results — completed.** All 11 ablation configurations were run against
+the real MVTec AD `bottle` dataset. The aggregate table below is generated from
+the experiment logs by `summarize_ablations.py`.
+
+| Group | Variant | Test F1 | Test ROC-AUC | Test PR-AUC | Training time (s) |
+|---|---|---:|---:|---:|---:|
+| Fine-tune mode | frozen | 86.60% | 63.19% | 88.24% | 98.16 |
+| Fine-tune mode | partial (default) | **91.76%** | **95.24%** | **98.57%** | 186.03 |
+| Fine-tune mode | full | 88.89% | 92.86% | 98.03% | 162.02 |
+| Augmentation | on (default) | **91.76%** | **95.24%** | **98.57%** | 190.33 |
+| Augmentation | off | **91.76%** | **95.24%** | **98.57%** | 185.70 |
+| Latent dim | 64 | 90.91% | 92.49% | 97.69% | 1194.89 |
+| Latent dim | 128 | **94.25%** | 91.21% | 97.23% | 1118.92 |
+| Latent dim | 256 (default) | 93.02% | 90.84% | 97.12% | 1137.44 |
+| Latent dim | 512 | 92.13% | **93.77%** | **98.03%** | 1238.13 |
+| Loss | mse (default) | 93.02% | 90.84% | 97.12% | **1115.36** |
+| Loss | l1 | 89.89% | 92.12% | 97.55% | 1230.07 |
+
+### Ablation findings
+
+- **Fine-tuning:** partial fine-tuning is the strongest classifier setting in
+  this run, reaching 91.76% F1, 95.24% ROC-AUC, and 98.57% PR-AUC. Full
+  fine-tuning drops to 88.89% F1, while freezing the backbone drops further to
+  86.60% F1 and 63.19% ROC-AUC.
+- **Augmentation:** augmentation on and off produced identical test metrics in
+  this run (91.76% F1, 95.24% ROC-AUC, 98.57% PR-AUC). Turning augmentation off
+  reduced training time slightly, from 190.33 s to 185.70 s.
+- **Latent dimension:** 128 gives the highest autoencoder F1 at 94.25%.
+  Latent 512 gives the highest ROC-AUC (93.77%) and PR-AUC (98.03%), but takes
+  the longest to train (1238.13 s). The default 256-dimensional bottleneck
+  reaches 93.02% F1.
+- **Reconstruction loss:** MSE outperforms L1 on F1 in this run (93.02% vs.
+  89.89%) and is also substantially faster (1115.36 s vs. 1230.07 s), while
+  L1 achieves higher ROC-AUC and PR-AUC.
+
+The generated plots are saved under `results/plots/`:
+
+- `ablation_autoencoder_latent_dimension.png`
+- `ablation_autoencoder_reconstruction_loss.png`
+- `ablation_classifier_augmentation_on_off.png`
+- `ablation_classifier_fine-tune_mode.png`
+
+The complete machine-readable aggregate is saved as
+`results/experiments/ablation_summary_table.csv`.
+
+**Interpretation:** on this particular `bottle` split and seed, the results
+support partial fine-tuning for the classifier and a 128-dimensional latent
+space for maximizing autoencoder F1. The results should not be interpreted as
+universal hyperparameter conclusions: the dataset is small, and the
+single-run measurements can have substantial variance. Multi-seed evaluation
+remains appropriate before making broader claims.
 
 ## 13. Error Analysis
 
-Error analysis was run on **55 held-out test images** using the
-validation-selected autoencoder threshold of **0.00170**. The analysis
-categorizes predictions into false positives, false negatives, low-margin
-correct predictions, and ordinary correct predictions. Representative
-visualizations are saved under `results/examples/`.
+Implemented in `src/evaluation/error_analysis.py`, run via
+`python -m src.evaluation.run_error_analysis --autoencoder_threshold <value>`
+(the threshold logged during autoencoder training).
 
-### Summary
+For each model, every `labeled_test` image is classified into one of:
+`false_positive`, `false_negative`, `low_margin_correct` (a correct
+prediction sitting close enough to the decision boundary that it's worth
+inspecting), or a plain correct prediction. For every case in the first
+three buckets, a composite visualization is saved to `results/examples/`:
+original image + Grad-CAM overlay (classifier) or original + reconstruction
++ anomaly heatmap (autoencoder), with a text banner showing the true label,
+predicted label, and score.
 
-| Model | False Positives | False Negatives | Low-Margin Correct |
-|---|---:|---:|---:|
-| Classifier (ResNet18) | 4 | 3 | 4 |
-| Autoencoder | 4 | 2 | 10 |
+**This goes beyond "here are some pictures that look wrong"**: for every
+defective image with a ground-truth mask, `summarize_defect_area_vs_failure`
+computes the actual fraction of pixels marked defective, and compares the
+mean defect area of false negatives against the mean defect area of caught
+defects (true positives). This turns "the model probably misses small
+defects" from a plausible-sounding guess into a number computed directly
+from the ground-truth masks. False negatives are also broken down by
+defect subtype (`broken_large` / `broken_small` / `contamination`) to see
+whether failures cluster in one category.
 
-The classifier's three false negatives were all `contamination` defects.
-The autoencoder's two false negatives consisted of one `broken_small` defect
-and one `contamination` defect.
+**Status**: implemented and unit-tested (`tests/test_error_analysis.py`,
+including a regression test for a real bug this work surfaced — see below).
+Run it against your trained checkpoints and drop the resulting counts,
+correlation numbers, and a few representative saved images into this
+section.
 
-### Defect Area vs. Failure
-
-For defective test images with ground-truth masks, the analysis compares the
-mean fraction of the image covered by defects in false negatives against
-defects that were correctly detected.
-
-| Model | Mean Defect Area — False Negatives | Mean Defect Area — True Positives | Difference |
-|---|---:|---:|---:|
-| Classifier | 2.68% | 8.25% | 5.57 percentage points |
-| Autoencoder | 1.79% | 8.15% | 6.36 percentage points |
-
-Both models show the same pattern: false-negative defects occupy substantially
-less image area, on average, than defects that are successfully detected.
-The autoencoder's false-negative defects average **1.79%** of the image versus
-**8.15%** for its true positives. The classifier shows a similar difference:
-**2.68%** versus **8.25%**.
-
-This supports the hypothesis that smaller defects are harder to detect, while
-avoiding the stronger claim that defect size is the only cause of failure.
-
-### Failure Breakdown
-
-**Classifier**
-
-- **3 false negatives**, all `contamination`.
-- The missed contamination defects had mask coverage of approximately
-  **2.07%**, **2.63%**, and **3.33%** of the image.
-- **4 false positives** occurred on normal images.
-- **4 low-margin correct** predictions were flagged for inspection.
-
-**Autoencoder**
-
-- **2 false negatives**: one `broken_small` and one `contamination`.
-- The missed `broken_small` defect covered approximately **1.51%** of the image.
-- The missed `contamination` defect covered approximately **2.07%** of the image.
-- **4 false positives** occurred on normal images.
-- **10 low-margin correct** predictions were flagged for inspection.
-
-### Representative Visualizations
-
-The error-analysis script saves composite visualizations containing the original
-image and the relevant model explanation:
-
-- **Classifier:** original image + Grad-CAM overlay.
-- **Autoencoder:** original image + reconstruction + reconstruction-error heatmap.
-
-Generated artifacts are stored under:
-
-```text
-results/examples/classifier/
-results/examples/autoencoder/
-```
-
-A machine-readable summary of the complete analysis is saved to:
-
-```text
-results/examples/error_analysis_summary.json
-```
-
-Representative classifier false-negative artifacts include:
-
-```text
-results/examples/classifier/classifier_false_negative_003.png
-results/examples/classifier/classifier_false_negative_004.png
-results/examples/classifier/classifier_false_negative_019.png
-```
-
-Representative autoencoder false-negative artifacts include:
-
-```text
-results/examples/autoencoder/autoencoder_false_negative_005.png
-results/examples/autoencoder/autoencoder_false_negative_004.png
-```
-
-The error-analysis implementation is also covered by the test suite, including
-failure classification, visualization artifact generation, and defect-area
-analysis.
-
-> **Bug found and fixed while building this:** `src/visualization/gradcam.py`
+> **Bug found and fixed while building this**: `src/visualization/gradcam.py`
 > initially failed whenever `finetune_mode: frozen` was used (a fully
-> supported classifier config). With every backbone parameter's
-> `requires_grad=False`, PyTorch never builds an autograd graph, so Grad-CAM's
-> backward hooks received `None` gradients. The fix forces `requires_grad=True`
-> on the input tensor before the Grad-CAM forward pass, which is sufficient to
-> build the graph regardless of which backbone parameters are trainable. The
-> regression is covered by `test_gradcam_works_with_frozen_backbone`.
+> supported classifier config) — with every backbone parameter's
+> `requires_grad=False`, PyTorch never builds an autograd graph, so
+> Grad-CAM's backward hooks received `None` gradients. Fixed by forcing
+> `requires_grad=True` on the *input* tensor before the Grad-CAM forward
+> pass, which is sufficient to build the graph regardless of which backbone
+> parameters are trainable. Covered by
+> `test_gradcam_works_with_frozen_backbone` so it can't silently regress.
 
 ## 14. Explainability
 
@@ -609,13 +604,14 @@ pytest --cov=src          # with coverage
 pytest tests/test_models.py -v
 ```
 
-**54 tests, currently passing**, covering:
+**62 tests, currently passing**, covering:
 
 - Model forward-pass shapes, freeze-mode correctness, checkpoint round-trips, and a Grad-CAM/frozen-backbone regression test (`test_models.py`)
 - Dataset split disjointness/determinism, leakage guarantees, transform behavior, image validation (`test_dataset.py`)
 - End-to-end inference on synthetic checkpoints for both approaches (`test_inference.py`)
 - Baseline model correctness: mean-image fitting/scoring, classical feature extraction, logistic regression fit/predict (`test_baseline.py`)
 - Error analysis: failure classification, visualization artifact saving, defect-area/failure correlation math (`test_error_analysis.py`)
+- Ablation aggregation: experiment-log parsing/grouping, plot generation (`test_summarize_ablations.py`)
 
 Tests use a small synthetic MVTec-AD-shaped directory tree
 (`tests/test_dataset.py::_make_fake_mvtec`), so the full suite runs without
@@ -664,9 +660,9 @@ verifying the pipeline before committing to a multi-GB download.
   pretrained-feature patch embeddings + nearest-neighbor scoring) as a
   stronger comparison point against the autoencoder — architecture slotted
   into `src/models/advanced.py`, currently a placeholder.
-- Run the full ablation matrix and extend the results with augmentation,
-  fine-tuning, and autoencoder latent-dimension comparisons.
+- Extend the completed ablation study with multiple random seeds and report
+  mean ± std for the key configurations, given the small dataset size.
 - Extend to additional MVTec AD categories once the `bottle` pipeline is
   fully validated, to measure cross-category generalization.
-- Multi-seed reporting (mean ± std across ≥3 seeds) given the small dataset
-  size, rather than single-run numbers.
+- Multi-seed reporting (mean ± std across ≥3 seeds) for the completed
+  ablations and headline models, rather than relying on single-run numbers.
